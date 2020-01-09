@@ -38,7 +38,7 @@ import com.rabbitmq.client.AMQP.BasicProperties;
 
 /**
  * @see UriProcessingFormatter
- * @contributor nlevitt
+ * @author nlevitt
  */
 public class AMQPCrawlLogFeed extends AMQPProducerProcessor implements Lifecycle {
 
@@ -86,8 +86,8 @@ public class AMQPCrawlLogFeed extends AMQPProducerProcessor implements Lifecycle
 
     public AMQPCrawlLogFeed() {
         // set default values
-        exchange = "heritrix.realTimeFeed";
-        routingKey = "crawlLog";
+        setExchange("heritrix.realTimeFeed");
+        setRoutingKey("crawlLog");
     }
 
     @Override

@@ -83,15 +83,15 @@ import org.archive.url.LaxURLCodec;
  *  with the 'new' isLikelyUri() test is collected (in H3). Enable the 'xest'
  *  methods of the UriUtilsTest class for details. 
  *  
- * @contributor gojomo
+ * @author gojomo
  */
 public class UriUtils {
     private static final Logger LOGGER = Logger.getLogger(UriUtils.class.getName());
 
     // naive likely-uri test: 
-    //    no whitespace or '<' or '>' 
+    //    no '<' or '>' 
     //    at least one '.' or '/';
-    protected static final String NAIVE_LIKELY_URI_PATTERN = "[^<>\\s]*[\\./][^<>\\s]*";
+    protected static final String NAIVE_LIKELY_URI_PATTERN = "[^<>]*[\\./][^<>]*";
     
     public static boolean isPossibleUri(CharSequence candidate) {
         return TextUtils.matches(NAIVE_LIKELY_URI_PATTERN, candidate);
@@ -310,8 +310,6 @@ public class UriUtils {
     
     /**
      * Perform additional fixup of likely-URI Strings
-     * 
-     * @param string detected candidate String
      * @return String changed/decoded to increase likelihood it is a 
      * meaningful non-404 URI
      */
@@ -381,6 +379,7 @@ public class UriUtils {
     }
     
     protected static final Set<String> KNOWN_GOOD_FILE_EXTENSIONS = new HashSet<String>();
+
     static {
         /*
          * Real known use cases for this are .min.js, .min.css, and we've seen
@@ -389,19 +388,20 @@ public class UriUtils {
          */
         KNOWN_GOOD_FILE_EXTENSIONS.addAll(Arrays.asList(".jpg", ".js", ".css",
                 ".png", ".gif", ".swf", ".flv", ".mp4", ".mp3", ".jpeg",
-                ".html"));
+                ".html", ".pdf"));
     }
 
     protected static final String QNV = "[a-zA-Z_]+=(?:[\\w-/.]|%[0-9a-fA-F]{2})*"; // name=value for query strings
     // group(1) filename
     // group(2) filename extension with leading '.'
     protected static final String LIKELY_RELATIVE_URI_PATTERN = 
-            "(?:\\.?/)?"                                         // may start with "/" or "./"
-            + "(?:(?:[\\w-]+|\\.\\.)/)*"                         // may have path/segments/
-            + "([\\w-]+(?:\\.[\\w-]+)?(\\.[a-zA-Z0-9]{2,5})?)?"  // may have a filename with or without an extension
-            + "(?:\\?(?:"+ QNV + ")(?:&(?:" + QNV + "))*)?"      // may have a ?query=string
-            + "(?:#[\\w-]+)?";                                   // may have a #fragment
-
+            "(?:\\.?/)?"                                                    // may start with "/" or "./"
+            + "(?:(?:[\\s\\w-]+|\\.\\.)(?:/))*"                             // may have path/segments/segment2
+            + "([\\s\\w-]+(?:\\.[\\w-]+)??(\\.[a-zA-Z0-9]{2,5})?)?"         // may have a filename with or without an extension
+            + "(?:\\?(?:"+ QNV + ")(?:&(?:" + QNV + "))*)?"                 // may have a ?query=string
+            + "(?:#[\\w-]+)?";                                              // may have a #fragment
+    
+    
     public static boolean isVeryLikelyUri(CharSequence candidate) {
         // must have a . or /
         if (!TextUtils.matches(NAIVE_LIKELY_URI_PATTERN, candidate)) {
@@ -423,7 +423,7 @@ public class UriUtils {
         if (!matcher.matches()) {
             return false;
         }
-        
+
         /*
          * Remaining tests discard stuff that the
          * LIKELY_RELATIVE_URI_PATTERN can't catch
@@ -435,6 +435,12 @@ public class UriUtils {
         if (filename != null && extension != null
                 && filename.indexOf('.') != filename.lastIndexOf('.')
                 && !KNOWN_GOOD_FILE_EXTENSIONS.contains(extension)) {
+            return false;
+        }
+
+        if (TextUtils.matches(".*\\s+.*", candidate)
+                && (extension == null
+                    || !KNOWN_GOOD_FILE_EXTENSIONS.contains(extension))) {
             return false;
         }
 

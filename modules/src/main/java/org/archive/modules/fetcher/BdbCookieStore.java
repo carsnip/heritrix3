@@ -50,11 +50,11 @@ import com.sleepycat.je.DatabaseException;
  * {@link CookieStore#getCookies()} returns a list of cookies limited to
  * the supplied host and parent domains, if applicable.
  * 
- * @see https://webarchive.jira.com/browse/HER-2070
- * @see https://github.com/internetarchive/heritrix3/pull/96
- * @see https://groups.yahoo.com/neo/groups/archive-crawler/conversations/messages/8620
+ * @see <a href="https://webarchive.jira.com/browse/HER-2070">https://webarchive.jira.com/browse/HER-2070</a>
+ * @see <a href="https://github.com/internetarchive/heritrix3/pull/96">https://github.com/internetarchive/heritrix3/pull/96</a>
+ * @see <a href="https://groups.yahoo.com/neo/groups/archive-crawler/conversations/messages/8620">https://groups.yahoo.com/neo/groups/archive-crawler/conversations/messages/8620</a>
  * 
- * @contributor nlevitt
+ * @author nlevitt
  */
 public class BdbCookieStore extends AbstractCookieStore implements
         FetchHTTPCookieStore, CookieStore {
@@ -129,7 +129,7 @@ public class BdbCookieStore extends AbstractCookieStore implements
         }
     }
 
-    public void addCookie(Cookie cookie) {
+    public void addCookieImpl(Cookie cookie) {
         byte[] key;
         try {
             key = sortableKey(cookie).getBytes("UTF-8");
@@ -158,7 +158,7 @@ public class BdbCookieStore extends AbstractCookieStore implements
             throw new RuntimeException(e); // impossible
         }
     }
-
+    
     /**
      * Returns a {@link LimitedCookieStoreFacade} whose
      * {@link LimitedCookieStoreFacade#getCookies()} method returns only cookies

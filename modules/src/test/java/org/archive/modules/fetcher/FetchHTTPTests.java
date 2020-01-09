@@ -53,10 +53,7 @@ import javax.net.ssl.SSLException;
 
 import org.apache.commons.httpclient.URIException;
 import org.apache.commons.io.IOUtils;
-import org.apache.http.NameValuePair;
 import org.apache.http.NoHttpResponseException;
-import org.apache.http.client.utils.URLEncodedUtils;
-import org.apache.http.message.BasicNameValuePair;
 import org.archive.httpclient.ConfigurableX509TrustManager.TrustLevel;
 import org.archive.modules.CoreAttributeConstants;
 import org.archive.modules.CrawlMetadata;
@@ -65,6 +62,7 @@ import org.archive.modules.CrawlURI.FetchType;
 import org.archive.modules.ProcessorTestBase;
 import org.archive.modules.credential.HttpAuthenticationCredential;
 import org.archive.modules.deciderules.RejectDecideRule;
+import org.archive.modules.forms.HTMLForm.NameValue;
 import org.archive.modules.recrawl.FetchHistoryProcessor;
 import org.archive.modules.revisit.ServerNotModifiedRevisit;
 import org.archive.net.UURI;
@@ -159,10 +157,12 @@ public class FetchHTTPTests extends ProcessorTestBase {
         assertEquals(DEFAULT_PAYLOAD_STRING, curi.getRecorder().getContentReplayCharSequence().toString());
         
         if (!exclusions.contains("httpBindAddress")) {
-            assertEquals("127.0.0.1", FetchHTTPTest.getLastRequest().getRemoteAddr());
+            assertTrue(rawResponseString(curi).contains("Client-Host: 127.0.0.1\r\n"));
         }
         
-        assertTrue(curi.getNonFatalFailures().isEmpty());
+        if (!exclusions.contains("nonFatalFailuresIsEmpty")) {
+        	assertTrue(curi.getNonFatalFailures().isEmpty());
+        }
     }
 
     // convenience methods to get strings from raw recorded i/o
@@ -262,7 +262,7 @@ public class FetchHTTPTests extends ProcessorTestBase {
 
         // check that we got the expected response and the fetcher did its thing
         assertEquals(401, curi.getFetchStatus());
-        assertEquals("Basic realm=\"basic-auth-realm\"", curi.getHttpResponseHeader("WWW-Authenticate"));
+        assertEquals("basic realm=\"basic-auth-realm\"", curi.getHttpResponseHeader("WWW-Authenticate"));
         assertTrue(curi.getCredentials().contains(basicAuthCredential));
         assertTrue(curi.getHttpAuthChallenges() != null && curi.getHttpAuthChallenges().containsKey("basic"));
         
@@ -328,7 +328,7 @@ public class FetchHTTPTests extends ProcessorTestBase {
         CrawlURI curi = makeCrawlURI("http://localhost:7777/401-no-challenge");
         fetcher().process(curi);
         assertEquals(401, curi.getFetchStatus());
-        runDefaultChecks(curi, "requestLine", "fetchStatus");
+        runDefaultChecks(curi, "requestLine", "fetchStatus","nonFatalFailuresIsEmpty");
     }
     
     protected void checkSetCookieURI() throws URIException, IOException,
@@ -406,8 +406,8 @@ public class FetchHTTPTests extends ProcessorTestBase {
         fetcher().process(curi);
 
         // the client bind address isn't recorded anywhere in heritrix as
-        // far as i can tell, so we get it this way...
-        assertEquals(addr, FetchHTTPTest.getLastRequest().getRemoteAddr());
+        // far as i can tell, so we get the server to echo it back to us...
+        assertTrue(rawResponseString(curi).contains("Client-Host: " + addr + "\r\n"));
 
         runDefaultChecks(curi, "httpBindAddress");
     }
@@ -752,6 +752,9 @@ public class FetchHTTPTests extends ProcessorTestBase {
     public void testNoResponse() throws Exception {
         NoResponseServer noResponseServer = new NoResponseServer("localhost", 7780);
         noResponseServer.start();
+
+        // Give the server time to start up:
+        Thread.sleep(1000);
         
         // CrawlURI curi = makeCrawlURI("http://stats.bbc.co.uk/robots.txt");
         CrawlURI curi = makeCrawlURI("http://localhost:7780");
@@ -777,7 +780,9 @@ public class FetchHTTPTests extends ProcessorTestBase {
         fetcher().process(curi);
         // logger.info('\n' + httpRequestString(curi) + "\n\n" + rawResponseString(curi));
         assertTrue(httpRequestString(curi).startsWith("GET /99% HTTP/1.0\r\n"));
-        runDefaultChecks(curi, "requestLine");
+        // jetty 9 rejects requests with paths like this with 400 Bad Request
+        // so we can't run these checks anymore
+        //runDefaultChecks(curi, "requestLine");
     }
     
     public void testTwoQuestionMarks() throws Exception {
@@ -856,16 +861,14 @@ public class FetchHTTPTests extends ProcessorTestBase {
         CrawlURI curi = makeCrawlURI("http://localhost:7777/");
         curi.setFetchType(FetchType.HTTP_POST);
 
-        List<NameValuePair> params = new LinkedList<NameValuePair>();
-        params.add(new BasicNameValuePair("name1", "value1"));
-        params.add(new BasicNameValuePair("name1", "value2"));
-        params.add(new BasicNameValuePair("funky name 2", "whoa crazy\t && 🍺 🍻 \n crazier \rooo"));
-        String submitData = URLEncodedUtils.format(params, "UTF-8");
-        assertEquals("name1=value1&name1=value2&funky+name+2=whoa+crazy%09+%26%26+%F0%9F%8D%BA+%F0%9F%8D%BB+%0A+crazier+%0Dooo", submitData);
+        List<NameValue> params = new LinkedList<NameValue>();
+        params.add(new NameValue("name1", "value1"));
+        params.add(new NameValue("name1", "value2"));
+        params.add(new NameValue("funky name 2", "whoa crazy\t && 🍺 🍻 \n crazier \rooo"));
+        curi.getData().put(CoreAttributeConstants.A_SUBMIT_DATA, params); 
 
-        curi.getData().put(CoreAttributeConstants.A_SUBMIT_DATA, submitData); 
         fetcher().process(curi);
-        
+
         assertTrue(httpRequestString(curi).startsWith("POST / HTTP/1.0\r\n"));
         assertTrue(httpRequestString(curi).endsWith("\r\n\r\nname1=value1&name1=value2&funky+name+2=whoa+crazy%09+%26%26+%F0%9F%8D%BA+%F0%9F%8D%BB+%0A+crazier+%0Dooo"));
         assertEquals(FetchType.HTTP_POST, curi.getFetchType());

@@ -19,6 +19,7 @@
 package org.archive.crawler.reporting;
 
 import org.archive.crawler.framework.CrawlController;
+import org.archive.crawler.util.CrawledBytesHistotable;
 import org.archive.util.ArchiveUtils;
 import org.archive.util.PaddingStringBuffer;
 
@@ -27,7 +28,7 @@ import org.archive.util.PaddingStringBuffer;
  * obtaining a consistent set of stats and a short log of stats
  * for calculating rates.
  * 
- * @contributor gojomo
+ * @author gojomo
  */
 public class CrawlStatSnapshot {
     public long timestamp; 
@@ -57,6 +58,11 @@ public class CrawlStatSnapshot {
     public long deepestUri;
     public long averageDepth;
     
+    public long novelBytes;
+    public long novelUriCount;
+    public long warcNovelBytes;
+    public long warcNovelUriCount;
+    
     /**
      * Collect all relevant snapshot samples, from the given CrawlController
      * and StatisticsTracker (which also provides the previous snapshot 
@@ -70,6 +76,11 @@ public class CrawlStatSnapshot {
         downloadedUriCount = controller.getFrontier().succeededFetchCount();
         bytesProcessed = stats.crawledBytes.getTotalBytes();
         timestamp = System.currentTimeMillis();
+        
+        novelBytes = stats.crawledBytes.get(CrawledBytesHistotable.NOVEL);
+        novelUriCount = stats.crawledBytes.get(CrawledBytesHistotable.NOVELCOUNT);
+        warcNovelBytes = stats.crawledBytes.get(CrawledBytesHistotable.WARC_NOVEL_CONTENT_BYTES);
+        warcNovelUriCount = stats.crawledBytes.get(CrawledBytesHistotable.WARC_NOVEL_URLS);
         
         elapsedMilliseconds = stats.getCrawlElapsedTime();
         discoveredUriCount = controller.getFrontier().discoveredUriCount();
@@ -111,7 +122,6 @@ public class CrawlStatSnapshot {
     /**
      * Return one line of current progress-statistics
      * 
-     * @param now
      * @return String of stats
      */
     public String getProgressStatisticsLine() {

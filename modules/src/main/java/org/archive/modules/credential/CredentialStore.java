@@ -23,16 +23,12 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.logging.Logger;
-
-import javax.management.AttributeNotFoundException;
-import javax.management.MBeanException;
-import javax.management.ReflectionException;
 
 import org.archive.modules.CrawlURI;
 import org.archive.spring.HasKeyedProperties;
@@ -67,10 +63,10 @@ public class CredentialStore implements Serializable, HasKeyedProperties {
      * Credentials used by heritrix authenticating. See
      * http://crawler.archive.org/proposals/auth/ for background.
      * 
-     * @see http://crawler.archive.org/proposals/auth/
+     * @see <a href="http://crawler.archive.org/proposals/auth/">http://crawler.archive.org/proposals/auth/</a>
      */
     {
-        setCredentials(new HashMap<String, Credential>());
+        setCredentials(new TreeMap<String, Credential>());
     }
     @SuppressWarnings("unchecked")
     public Map<String,Credential> getCredentials() {
@@ -109,8 +105,6 @@ public class CredentialStore implements Serializable, HasKeyedProperties {
 
 
     /**
-     * @param context Pass a ProcessorURI.  Used to set
-     * context.
      * @return An iterator or null.
      */
     public Collection<Credential> getAll() {
@@ -123,9 +117,6 @@ public class CredentialStore implements Serializable, HasKeyedProperties {
      * @param name Name to give the manufactured credential.  Should be unique
      * else the add of the credential to the list of credentials will fail.
      * @return Returns <code>name</code>'d credential.
-     * @throws AttributeNotFoundException
-     * @throws MBeanException
-     * @throws ReflectionException
      */
     public Credential get(/*StateProvider*/Object context, String name) {
         return getCredentials().get(name);

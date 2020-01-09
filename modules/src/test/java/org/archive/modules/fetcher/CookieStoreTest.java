@@ -24,8 +24,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.logging.Logger;
@@ -43,7 +45,7 @@ import org.archive.util.TmpDirTestCase;
  * Tests that {@link BdbCookieStore} matches behavior of
  * {@link BasicCookieStore}.
  * 
- * @contributor nlevitt
+ * @author nlevitt
  */
 public class CookieStoreTest extends TmpDirTestCase {
 
@@ -164,6 +166,25 @@ public class CookieStoreTest extends TmpDirTestCase {
         assertCookieStoresEquivalent(basicCookieStore(), bdbCookieStore());
     }
 
+    public void testMaxCookieDomain() throws IOException {
+        bdbCookieStore().clear();
+
+        for (int i = 1; i <= BdbCookieStore.MAX_COOKIES_FOR_DOMAIN; ++i) {
+            BasicClientCookie cookie = new BasicClientCookie("name" + i, "value" + i);
+            bdbCookieStore().addCookie(cookie);
+            
+            assertCookieStoreCountEquals(bdbCookieStore, i);
+        }
+        
+        BasicClientCookie cookie = new BasicClientCookie("nametoomany1", "valuetoomany1");
+        bdbCookieStore().addCookie(cookie);
+        assertCookieStoreCountEquals(bdbCookieStore, BdbCookieStore.MAX_COOKIES_FOR_DOMAIN);
+        
+        cookie = new BasicClientCookie("nametoomany2", "valuetoomany2");
+        bdbCookieStore().addCookie(cookie);
+        assertCookieStoreCountEquals(bdbCookieStore, BdbCookieStore.MAX_COOKIES_FOR_DOMAIN);
+    }
+    
     public void testPaths() throws IOException {
         bdbCookieStore().clear();
         basicCookieStore().clear();
@@ -276,7 +297,7 @@ public class CookieStoreTest extends TmpDirTestCase {
         assertCookieListsEquivalent(cookiesBefore, cookiesAfter);
     }
 
-    public void testConcurrentLoad() throws IOException, InterruptedException {
+    public void testConcurrentLoadNoDomainCookieLimitBreach() throws IOException, InterruptedException {
         bdbCookieStore().clear();
         basicCookieStore().clear();
         final Random rand = new Random();
@@ -287,7 +308,7 @@ public class CookieStoreTest extends TmpDirTestCase {
                 try {
                     while (!Thread.interrupted()) {
                         BasicClientCookie cookie = new BasicClientCookie(UUID.randomUUID().toString(), UUID.randomUUID().toString());
-                        cookie.setDomain("d" + rand.nextInt(10) + ".example.com");
+                        cookie.setDomain("d" + rand.nextInt() + ".example.com");
                         bdbCookieStore().addCookie(cookie);
                         basicCookieStore().addCookie(cookie);
                     }
@@ -315,8 +336,12 @@ public class CookieStoreTest extends TmpDirTestCase {
 
         List<Cookie> bdbCookieList = bdbCookieStore().getCookies();
         assertTrue(bdbCookieList.size() > 3000);
-        assertCookieListsEquivalent(bdbCookieList, basicCookieStore().getCookies());
+        assertCookieListsEquivalent(bdbCookieList, basicCookieStore().getCookies());        
     }
+
+    protected void assertCookieStoreCountEquals(BdbCookieStore bdb, int count) {
+        assertEquals(bdb.getCookies().size(), count);
+    }    
 
     protected void assertCookieListsEquivalent(List<Cookie> list1,
             List<Cookie> list2) {

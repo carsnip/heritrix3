@@ -31,6 +31,7 @@ import java.util.regex.Matcher;
 
 import org.apache.commons.httpclient.URIException;
 import org.archive.io.ReplayCharSequence;
+import org.archive.modules.CoreAttributeConstants;
 import org.archive.modules.CrawlMetadata;
 import org.archive.modules.CrawlURI;
 import org.archive.modules.net.RobotsPolicy;
@@ -57,7 +58,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * TODO: Compare against extractors based on HTML parsing libraries for 
  * accuracy, completeness, and speed.
  * 
- * @contributor gojomo
+ * @author gojomo
  */
 public class ExtractorHTML extends ContentExtractor implements InitializingBean {
 
@@ -138,7 +139,7 @@ public class ExtractorHTML extends ContentExtractor implements InitializingBean 
       "(?is)<(?:((script[^>]*+)>.*?</script)" + // 1, 2
       "|((style[^>]*+)>.*?</style)" + // 3, 4
       "|(((meta)|(?:\\w{1,"+MAX_ELEMENT_REPLACE+"}))\\s+[^>]*+)" + // 5, 6, 7
-      "|(!--(?!\\[if).*?--))>"; // 8 
+      "|(!--(?!\\[if|>).*?--))>"; // 8 
 
 //    version w/ problems with unclosed script tags 
 //    static final String RELEVANT_TAG_EXTRACTOR =
@@ -187,8 +188,8 @@ public class ExtractorHTML extends ContentExtractor implements InitializingBean 
     // sorts are matched specially
     static final String EACH_ATTRIBUTE_EXTRACTOR =
       "(?is)\\s?((href)|(action)|(on\\w*)" // 1, 2, 3, 4 
-     +"|((?:src)|(?:lowsrc)|(?:background)|(?:cite)|(?:longdesc)" // ...
-     +"|(?:usemap)|(?:profile)|(?:datasrc))" // 5
+     +"|((?:src)|(?:srcset)|(?:lowsrc)|(?:background)|(?:cite)" // ...
+     +"|(?:longdesc)|(?:usemap)|(?:profile)|(?:datasrc))" // 5
      +"|(codebase)|((?:classid)|(?:data))|(archive)|(code)" // 6, 7, 8, 9
      +"|(value)|(style)|(method)" // 10, 11, 12
      +"|([-\\w]{1,"+MAX_ATTR_NAME_REPLACE+"}))" // 13
@@ -201,7 +202,7 @@ public class ExtractorHTML extends ContentExtractor implements InitializingBean 
     // 2: HREF - single URI relative to doc base, or occasionally javascript:
     // 3: ACTION - single URI relative to doc base, or occasionally javascript:
     // 4: ON[WHATEVER] - script handler
-    // 5: SRC,LOWSRC,BACKGROUND,CITE,LONGDESC,USEMAP,PROFILE, or DATASRC
+    // 5: SRC,SRCSET,LOWSRC,BACKGROUND,CITE,LONGDESC,USEMAP,PROFILE, or DATASRC
     //    single URI relative to doc base
     // 6: CODEBASE - a single URI relative to doc base, affecting other
     //    attributes
@@ -421,9 +422,11 @@ public class ExtractorHTML extends ContentExtractor implements InitializingBean 
                     // other HREFs treated as links
                     processLink(curi, value, context);
                 }
-                if (elementStr.equalsIgnoreCase(BASE)) {
+                // Set the relative or absolute base URI if it's not already been modified. 
+                // See https://github.com/internetarchive/heritrix3/pull/209
+                if (elementStr.equalsIgnoreCase(BASE) && !curi.containsDataKey(CoreAttributeConstants.A_HTML_BASE)) {
                     try {
-                        UURI base = UURIFactory.getInstance(value.toString());
+                        UURI base = UURIFactory.getInstance(curi.getUURI(),value.toString());
                         curi.setBaseURI(base);
                     } catch (URIException e) {
                         logUriError(e, curi.getUURI(), value);
@@ -576,7 +579,7 @@ public class ExtractorHTML extends ContentExtractor implements InitializingBean 
     }
 
     /**
-     * Consider a query-string-like collections of key=value[&key=value]
+     * Consider a query-string-like collections of key=value[&amp;key=value]
      * pairs for URI-like strings in the values. Where URI-like strings are
      * found, add as discovered outlink. 
      * 
@@ -604,11 +607,6 @@ public class ExtractorHTML extends ContentExtractor implements InitializingBean 
     /**
      * Consider whether a given string is URI-like. If so, add as discovered 
      * outlink. 
-     * 
-     * @param curi origin CrawlURI
-     * @param queryString query-string-like string
-     * @param valueContext page context where found
-
      */
     protected void considerIfLikelyUri(CrawlURI curi, CharSequence candidate, 
             CharSequence valueContext, Hop hop) {
@@ -679,11 +677,27 @@ public class ExtractorHTML extends ContentExtractor implements InitializingBean 
             logger.finest("embed (" + hop.getHopChar() + "): " + value.toString() +
                 " from " + curi);
         }
-        addLinkFromString(curi,
-            (value instanceof String)?
-                (String)value: value.toString(),
-            context, hop);
-        numberOfLinksExtracted.incrementAndGet();
+
+        if (context.equals(HTMLLinkContext.IMG_SRCSET.toString()) || context.equals(HTMLLinkContext.SOURCE_SRCSET.toString())) {
+
+            logger.fine("Found srcset listing: " + value.toString());
+
+            Matcher matcher = TextUtils.getMatcher("[\\s,]*(\\S*[^,\\s])(?:\\s(?:[^,(]+|\\([^)]*(?:\\)|$))*)?", value);
+            while (matcher.lookingAt()) {
+                String link = matcher.group(1);
+                matcher.region(matcher.end(), matcher.regionEnd());
+                logger.finer("Found " + link + " adding to outlinks.");
+                addLinkFromString(curi, link, context, hop);
+                numberOfLinksExtracted.incrementAndGet();
+            }
+            TextUtils.recycleMatcher(matcher);
+        } else {
+            addLinkFromString(curi,
+                (value instanceof String)?
+                    (String)value: value.toString(),
+                context, hop);
+            numberOfLinksExtracted.incrementAndGet();
+        }
     }
 
     

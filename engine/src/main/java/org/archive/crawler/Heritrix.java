@@ -33,12 +33,7 @@ import java.net.UnknownHostException;
 import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.cert.Certificate;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
 
@@ -55,13 +50,13 @@ import org.archive.crawler.framework.Engine;
 import org.archive.crawler.restlet.EngineApplication;
 import org.archive.crawler.restlet.RateLimitGuard;
 import org.archive.util.ArchiveUtils;
+import org.archive.util.KeyTool;
 import org.restlet.Component;
-import org.restlet.Guard;
 import org.restlet.Server;
 import org.restlet.data.ChallengeScheme;
 import org.restlet.data.Protocol;
-
-import sun.security.tools.KeyTool;
+import org.restlet.security.ChallengeAuthenticator;
+import org.restlet.security.MapVerifier;
 
 
 /**
@@ -213,7 +208,7 @@ public class Heritrix {
                     "mailto, clsid, res, file, rtsp, about");
         }
 
-        String maxFormSize = "org.mortbay.jetty.Request.maxFormContentSize";
+        String maxFormSize = "org.eclipse.jetty.server.Request.maxFormContentSize";
         if (System.getProperty(maxFormSize) == null) {
             System.setProperty(maxFormSize, "52428800");
         }
@@ -335,24 +330,30 @@ public class Heritrix {
         try {
             engine = new Engine(jobsDir);
             component = new Component();
-            
+
             if(bindHosts.isEmpty()) {
                 // listen all addresses
-                setupServer(port, null, keystorePath, keystorePassword, keyPassword);
+                setupServer(component, port, null, keystorePath, keystorePassword, keyPassword);
             } else {
                 // bind only to declared addresses, or just 'localhost'
                 for(String address : bindHosts) {
-                    setupServer(port, address, keystorePath, keystorePassword, keyPassword);
+                    setupServer(component, port, address, keystorePath, keystorePassword, keyPassword);
                 }
             }
             component.getClients().add(Protocol.FILE);
-            component.getClients().add(Protocol.CLAP); 
-            Guard guard = new RateLimitGuard(null,
-                    ChallengeScheme.HTTP_DIGEST, "Authentication Required");
-            guard.getSecrets().put(authLogin, authPassword.toCharArray());
-            component.getDefaultHost().attach(guard);
+            component.getClients().add(Protocol.CLAP);
+
+            MapVerifier verifier = new MapVerifier();
+            verifier.getLocalSecrets().put(authLogin, authPassword.toCharArray());
+
+            RateLimitGuard guard = new RateLimitGuard(component.getContext().createChildContext(),
+                    "Authentication Required", UUID.randomUUID().toString());
+            guard.setWrappedVerifier(verifier);
             guard.setNext(new EngineApplication(engine));
+
+            component.getDefaultHost().attach(guard);
             component.start();
+
             startupOut.println("engine listening at port "+port);
             startupOut.println("operator login set per " +
                     ((aOption.startsWith("@")) ? "file "+aOption : "command-line"));
@@ -458,16 +459,16 @@ public class Heritrix {
 
     /**
      * Create an HTTPS restlet Server instance matching the given parameters. 
-     * 
+     *
+     * @param component
      * @param port
      * @param address
      * @param keystorePath
      * @param keystorePassword
      * @param keyPassword
      */
-    protected void setupServer(int port, String address, String keystorePath, String keystorePassword, String keyPassword) {
-        Server server = new Server(Protocol.HTTPS,address,port,null);
-        component.getServers().add(server);
+    protected void setupServer(Component component, int port, String address, String keystorePath, String keystorePassword, String keyPassword) {
+        Server server = component.getServers().add(Protocol.HTTPS, address, port);
         server.getContext().getParameters().add("keystorePath", keystorePath);
         server.getContext().getParameters().add("keystorePassword", keystorePassword);
         server.getContext().getParameters().add("keyPassword", keyPassword);
@@ -477,7 +478,6 @@ public class Heritrix {
      * Exploit <code>-Dheritrix.home</code> if available to us.
      * Is current working dir if no heritrix.home property supplied.
      * @return Heritrix home directory.
-     * @throws IOException
      */
     protected static File getHeritrixHome() {
         String home = System.getProperty("heritrix.home");
